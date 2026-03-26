@@ -1,0 +1,225 @@
+*outlineasy.txt*  LSP symbol outline powered by treeasy.nvim
+
+Author:   you
+License:  MIT
+Requires: neovim >= 0.9, treeasy.nvim
+
+==============================================================================
+CONTENTS                                                   *outlineasy-contents*
+
+  1. Introduction ................ |outlineasy-intro|
+  2. Requirements ................ |outlineasy-requirements|
+  3. Setup ....................... |outlineasy-setup|
+  4. Commands .................... |outlineasy-commands|
+  5. Keymaps ..................... |outlineasy-keymaps|
+  6. Configuration ............... |outlineasy-config|
+  7. Scopes ...................... |outlineasy-scopes|
+  8. Rename ...................... |outlineasy-rename|
+  9. Devicons .................... |outlineasy-devicons|
+  10. Customisation .............. |outlineasy-customisation|
+
+==============================================================================
+1. INTRODUCTION                                               *outlineasy-intro*
+
+outlineasy.nvim displays LSP symbols in a sidebar tree view, rendered by
+treeasy.nvim. Three scopes are supported:
+
+  • `file`   — DocumentSymbol hierarchy for the current buffer
+  • `module` — all symbols in the current file's directory (Go package, etc.)
+  • `all`    — every symbol returned by workspace/symbol
+
+The panel tracks buffer switches automatically in `file` and `module` scopes.
+
+==============================================================================
+2. REQUIREMENTS                                        *outlineasy-requirements*
+
+  • Neovim >= 0.9
+  • treeasy.nvim (https://github.com/you/treeasy.nvim)
+  • An LSP server attached to the buffer:
+    - `file` scope requires `documentSymbolProvider`
+    - `module` / `all` scopes require `workspaceSymbolProvider`
+
+==============================================================================
+3. SETUP                                                      *outlineasy-setup*
+
+Minimal (lazy.nvim): >lua
+  {
+    "you/outlineasy.nvim",
+    dependencies = { "you/treeasy.nvim" },
+    opts = {},
+  }
+<
+With all options: >lua
+  require("outlineasy").setup({
+    scope = "file",   -- default scope
+    width = 40,       -- sidebar width in columns
+    side  = "left",   -- "left" | "right"
+  })
+<
+Recommended keybind: >lua
+  vim.keymap.set("n", "<leader>o", "<cmd>Outlineasy<cr>")
+  vim.keymap.set("n", "<leader>O", "<cmd>Outlineasy module<cr>")
+<
+
+==============================================================================
+4. COMMANDS                                                *outlineasy-commands*
+
+                                                                   *:Outlineasy*
+:Outlineasy [scope]
+    Toggle the outline panel. If [scope] is given, the scope is switched to
+    that value before toggling. Completion is available for the scope argument.
+
+    Examples: >
+      :Outlineasy
+      :Outlineasy file
+      :Outlineasy module
+      :Outlineasy all
+<
+                                                            *:OutlineasyRefresh*
+:OutlineasyRefresh
+    Force a full re-query of LSP symbols and redraw the tree. Useful when the
+    `all` scope is active (no automatic refresh) or after a language server
+    restart.
+
+==============================================================================
+5. KEYMAPS                                                  *outlineasy-keymaps*
+
+These keymaps are active only in the outline buffer.
+
+  Key                  Action ~
+  ──────────────────── ────────────────────────────────────────
+  <CR>                 Toggle expand / collapse node
+  <2-LeftMouse>        Toggle expand / collapse node
+  o  <Space>           Jump to symbol in the source window
+  r                    Rename symbol under cursor (LSP)
+  <LeftRelease>        Toggle (on [-]/[+]), rename (on [r]), or jump
+  e                    Recursively expand node and descendants
+  c                    Recursively collapse node and descendants
+  [󰑐] (header btn)    Refresh the tree
+
+All keymaps can be overridden via |outlineasy-customisation| before calling
+|outlineasy-setup|.
+
+==============================================================================
+6. CONFIGURATION                                             *outlineasy-config*
+
+`require("outlineasy").setup({opts})`   *outlineasy.setup()*
+
+opts table fields:
+
+  scope   string  Default scope on open. One of "file", "module", "all".
+                  Default: "file"
+
+  width   number  Width of the sidebar window in columns.
+                  Default: 40
+
+  side    string  Which side to open the sidebar. "left" or "right".
+                  Default: "left"
+
+  icons   bool    Enable nerd-font icons for symbol kinds and file types.
+                  Set to false if your font does not support nerd-font glyphs.
+                  Default: true
+
+All fields are optional. Calling setup() is optional too — defaults apply
+when the plugin is first used.
+
+==============================================================================
+7. SCOPES                                                    *outlineasy-scopes*
+
+                                                          *outlineasy-scope-file*
+file ~
+  Uses `textDocument/documentSymbol`. Returns a hierarchical tree mirroring the
+  document structure. With gopls, this includes nested types, methods, fields,
+  and constants.
+  Auto-refreshes on buffer switch and save.
+
+                                                        *outlineasy-scope-module*
+module ~
+  Uses `workspace/symbol`, filtered to the **current file's directory**. In Go
+  this matches exactly one package. Results are grouped by file with a
+  per-file icon from nvim-web-devicons when available.
+  Auto-refreshes when you switch to a buffer in a different directory.
+
+                                                           *outlineasy-scope-all*
+all ~
+  Uses `workspace/symbol` with no filtering. Results are grouped by file.
+  No automatic refresh — use |:OutlineasyRefresh| explicitly.
+
+==============================================================================
+8. RENAME                                                    *outlineasy-rename*
+
+Press `r` on any symbol node (or click its `[r]` button) to trigger an LSP
+rename. A `vim.ui.input` prompt appears pre-filled with the current name.
+Confirm with <CR> or cancel with <Esc>.
+
+The rename is dispatched via `textDocument/rename` directly, so workspace
+edits are applied atomically. The outline refreshes automatically 200 ms after
+the edit to reflect the new name everywhere.
+
+Requires a client with `renameProvider` capability (gopls, clangd, lua_ls…).
+
+==============================================================================
+9. DEVICONS                                                 *outlineasy-devicons*
+
+When nvim-web-devicons is installed, file nodes in `module` and `all` scopes
+display the file-type icon and its canonical color instead of the generic 󰈙.
+Colors are registered dynamically into treeasy as `devicon_<ext>` keys. The
+fallback (no devicons) uses the `file_` color key.
+
+nvim-web-devicons is an **optional** dependency — the plugin loads without it.
+
+==============================================================================
+10. CUSTOMISATION                                      *outlineasy-customisation*
+
+Colors, keymaps, and tree symbols are managed by treeasy.nvim under the class
+name `"outlineasy"`. Set them **before** calling setup() and they will not be
+overwritten: >lua
+
+  local treeasy = require("treeasy")
+
+  treeasy.set_colors("outlineasy", {
+    fn_    = "#7aa2f7",
+    meth   = "#7dcfff",
+    type_  = "#9ece6a",
+    enum_  = "#bb9af7",
+    field  = "#e0af68",
+    const  = "#ff9e64",
+    var_   = "#c0caf5",
+    file_  = "#737aa2",
+    header = { fg = "#1a1b26", bg = "#7aa2f7", bold = true },
+    btn    = { fg = "#565f89", bold = true },
+    dim    = "#414868",
+  })
+
+  treeasy.set_keymap("outlineasy", {
+    toggle_collapse = { "<CR>", "<2-LeftMouse>" },
+    click           = { "<LeftRelease>" },
+    open_rec        = { "e" },
+    collapse_rec    = { "c" },
+    jump            = { "o", "<Space>" },
+  })
+
+  treeasy.set_symbols("outlineasy", {
+    mid = "├─ ", last = "└─ ", vert = "│  ", space = "   ",
+  })
+
+  require("outlineasy").setup({ scope = "module", width = 45 })
+<
+
+Color keys and their targets:
+
+  Key       Applies to ~
+  ───────── ─────────────────────────────────────
+  fn_       functions
+  meth      methods
+  type_     types / interfaces / structs
+  enum_     enums / enum members
+  field     struct fields / object properties
+  const     constants
+  var_      variables and other symbols
+  file_     file nodes (module / all scopes)
+  header    header bar background
+  btn       [-] [+] [󰑐] buttons
+  dim       "no symbols found" message
+
+ vim:tw=78:ts=8:ft=help:norl:
