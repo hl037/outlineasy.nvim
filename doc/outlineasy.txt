@@ -48,16 +48,16 @@ The panel auto-refreshes on buffer switch (`file`/`module`) and on save.
 lazy.nvim ~
 >lua
   {
-    "you/outlineasy.nvim",
-    dependencies = { "you/treeasy.nvim", "nvim-tree/nvim-web-devicons" },
+    "hl037/outlineasy.nvim",
+    dependencies = { "hl037/treeasy.nvim", "nvim-tree/nvim-web-devicons" },
     opts = {},
   }
 <
 vim-plug ~
 >vim
-  Plug 'you/treeasy.nvim'
+  Plug 'hl037/treeasy.nvim'
   Plug 'nvim-tree/nvim-web-devicons'
-  Plug 'you/outlineasy.nvim'
+  Plug 'hl037/outlineasy.nvim'
 <
 >lua
   require("outlineasy").setup({})   -- must be called explicitly

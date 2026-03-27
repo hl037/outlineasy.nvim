@@ -1,13 +1,13 @@
 # outlineasy.nvim
 
-LSP symbol outline sidebar for Neovim, rendered by [treeasy.nvim](https://github.com/you/treeasy.nvim).
+LSP symbol outline sidebar for Neovim, rendered by [treeasy.nvim](https://github.com/hl037/treeasy.nvim).
 
 Three scopes — **file**, **module**, **all** — let you navigate symbols scoped to a single buffer, a whole package (Go, etc.), or all loaded buffers.
 
 ## Requirements
 
 - Neovim >= 0.9
-- [treeasy.nvim](https://github.com/you/treeasy.nvim)
+- [treeasy.nvim](https://github.com/hl037/treeasy.nvim)
 - An LSP server with `documentSymbolProvider`
 - [nvim-web-devicons](https://github.com/nvim-tree/nvim-web-devicons) *(optional)*
 
@@ -17,9 +17,9 @@ Three scopes — **file**, **module**, **all** — let you navigate symbols scop
 
 ```lua
 {
-  "you/outlineasy.nvim",
+  hl037/outlineasy.nvim",
   dependencies = {
-    "you/treeasy.nvim",
+    "hl037/treeasy.nvim",
     "nvim-tree/nvim-web-devicons",  -- optional
   },
   opts = {},
@@ -29,9 +29,9 @@ Three scopes — **file**, **module**, **all** — let you navigate symbols scop
 ### vim-plug
 
 ```vim
-Plug 'you/treeasy.nvim'
+Plug 'hl037/treeasy.nvim'
 Plug 'nvim-tree/nvim-web-devicons'   " optional
-Plug 'you/outlineasy.nvim'
+Plug 'hl037/outlineasy.nvim'
 ```
 
 ```lua
