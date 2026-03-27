@@ -7,14 +7,14 @@ M.S = {
   ghost       = nil,
   header      = nil,
   filter_node = nil,
+  content     = nil,   -- ghost node managed by current agent
+  agent       = nil,   -- current BufferAgent instance
   scope       = "file",
   hidden_kinds = {},
   buf         = nil,
-  dir         = nil,
   width       = 40,
   side        = "left",
   icons       = true,
-  refreshing  = false,  -- true while a module/all refresh is in flight
 }
 
 local STATE_FILE = vim.fn.stdpath("data") .. "/outlineasy/state.json"
