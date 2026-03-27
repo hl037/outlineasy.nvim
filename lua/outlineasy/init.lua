@@ -6,55 +6,12 @@ if not ok then
   return M
 end
 
-local lsp    = require("outlineasy.lsp")
-local tree_m = treeasy.tree
-local node_m = treeasy.node
-local CLASS  = "outlineasy"
-
--- ── State ─────────────────────────────────────────────────────────────────────
-
-local S = {
-  win         = nil,
-  tree        = nil,
-  view        = nil,
-  ghost       = nil,
-  header      = nil,
-  filter_node = nil,
-  scope       = "file",
-  hidden_kinds = {},   -- set: { [kind_number] = true }
-  buf         = nil,
-  dir         = nil,
-  width       = 40,
-  side        = "left",
-  icons       = true,
-}
-
--- ── Persistence ───────────────────────────────────────────────────────────────
-
-local STATE_FILE = vim.fn.stdpath("data") .. "/outlineasy/state.json"
-
-local function load_state()
-  local f = io.open(STATE_FILE, "r")
-  if not f then return end
-  local raw = f:read("*a"); f:close()
-  local ok, data = pcall(vim.fn.json_decode, raw)
-  if not ok or type(data) ~= "table" then return end
-  if data.scope then S.scope = data.scope end
-  if type(data.hidden_kinds) == "table" then
-    S.hidden_kinds = {}
-    for _, k in ipairs(data.hidden_kinds) do S.hidden_kinds[k] = true end
-  end
-end
-
-local function save_state()
-  vim.fn.mkdir(vim.fn.fnamemodify(STATE_FILE, ":h"), "p")
-  local f = io.open(STATE_FILE, "w")
-  if not f then return end
-  local hidden_list = {}
-  for k in pairs(S.hidden_kinds) do table.insert(hidden_list, k) end
-  f:write(vim.fn.json_encode({ scope = S.scope, hidden_kinds = hidden_list }))
-  f:close()
-end
+local providers = require("outlineasy.providers")
+local state_mod = require("outlineasy.state")
+local S         = state_mod.S
+local tree_m    = treeasy.tree
+local node_m    = treeasy.node
+local CLASS     = "outlineasy"
 
 -- ── devicons integration ──────────────────────────────────────────────────────
 
@@ -220,7 +177,7 @@ local function header_click(_n, _v, ctx)
       S.scope = SCOPE_CYCLE[S.scope] or "file"
       S.header.scope = S.scope
       tree_m.update_node(S.header)
-      save_state()
+      state_mod.save()
       M.refresh()
       return
     end
@@ -293,7 +250,7 @@ local function checkbox_toggle(node, _v, _ctx)
   -- Redraw checkbox and filter header (hidden count may change)
   tree_m.update_node(node)
   tree_m.update_node(S.filter_node)
-  save_state()
+  state_mod.save()
   M.refresh()
 end
 
@@ -393,7 +350,7 @@ local function sym_rename(node, _v, _ctx)
       line      = node.sym_range.start.line,
       character = node.sym_range.start.character,
     }
-    lsp.rename(bufnr, pos, new_name, function(err)
+    providers.rename(bufnr, pos, new_name, function(err)
       if err then
         vim.notify("outlineasy rename: " .. err, vim.log.levels.ERROR)
         return
@@ -429,26 +386,23 @@ end
 
 -- ── Node constructors ─────────────────────────────────────────────────────────
 
-local function new_sym_node(kind, name, uri, range, children_syms)
+local function new_sym_node(sym)
   local n = node_m.new()
-  n.sym_kind           = kind
-  n.sym_name           = name
-  n.sym_uri            = uri
-  n.sym_range          = range
+  n.sym_kind           = sym.kind
+  n.sym_name           = sym.name
+  n.sym_uri            = sym.uri
+  n.sym_range          = sym.range
   n.open_text          = sym_open_text
   n.collapsed_text     = sym_collapsed_text
-  n.handler["click"]   = sym_click
-  n.handler["jump"]    = sym_jump
-  n.handler["rename"]  = sym_rename
+  n.handler["click"]        = sym_click
+  n.handler["jump"]         = sym_jump
+  n.handler["rename"]       = sym_rename
   n.handler["collapse_all"] = on_collapse_all
   n.handler["expand_all"]   = on_expand_all
-  if children_syms and #children_syms > 0 then
+  if sym.children and #sym.children > 0 then
     n.children = {}
-    for i, child in ipairs(children_syms) do
-      local cn = new_sym_node(
-        child.kind, child.name, uri,
-        child.selectionRange or child.range,
-        child.children)
+    for i, child in ipairs(sym.children) do
+      local cn = new_sym_node(child)
       cn.parent = n; cn.index = i
       n.children[i] = cn
     end
@@ -458,47 +412,13 @@ end
 
 -- ── Tree builders ─────────────────────────────────────────────────────────────
 
--- From DocumentSymbol[] (hierarchical, file scope)
-local function build_doc_syms(symbols, uri)
+-- file scope: flat list of sym nodes (normalized symbols, may have children)
+local function build_file_nodes(symbols)
   local nodes = {}
   for i, sym in ipairs(symbols) do
-    nodes[i] = new_sym_node(sym.kind, sym.name, uri,
-      sym.selectionRange or sym.range, sym.children)
+    nodes[i] = new_sym_node(sym)
   end
   return nodes
-end
-
--- From SymbolInformation[] (flat, grouped by file — module / all scopes)
-local function build_ws_syms(symbols)
-  local by_file, order = {}, {}
-  for _, sym in ipairs(symbols) do
-    local u = sym.location.uri
-    if not by_file[u] then by_file[u] = {}; table.insert(order, u) end
-    table.insert(by_file[u], sym)
-  end
-  table.sort(order)
-  local fnodes = {}
-  for fi, uri in ipairs(order) do
-    local fnode = node_m.new()
-    fnode.file_uri           = uri
-    fnode.open_text          = file_open_text
-    fnode.collapsed_text     = file_collapsed_text
-    fnode.handler["click"]   = file_click
-    fnode.handler["collapse_all"] = on_collapse_all
-    fnode.handler["expand_all"]   = on_expand_all
-    local syms = by_file[uri]
-    table.sort(syms, function(a, b)
-      return a.location.range.start.line < b.location.range.start.line
-    end)
-    fnode.children = {}
-    for si, sym in ipairs(syms) do
-      local sn = new_sym_node(sym.kind, sym.name, uri, sym.location.range, nil)
-      sn.parent = fnode; sn.index = si
-      fnode.children[si] = sn
-    end
-    fnodes[fi] = fnode
-  end
-  return fnodes
 end
 
 -- ── Filter ────────────────────────────────────────────────────────────────────
@@ -567,29 +487,13 @@ end
 
 local function refresh_file(bufnr)
   S.buf = bufnr
-  local uri = vim.uri_from_bufnr(bufnr)
-  lsp.document_symbols(bufnr, function(syms)
+  providers.file_symbols(bufnr, function(syms)
     if not win_valid() then return end
     if not syms or #syms == 0 then set_empty(); return end
-    -- Detect SymbolInformation vs DocumentSymbol
-    if syms[1].location then
-      -- Fallback: server returned SymbolInformation from documentSymbol
-      local nodes = {}
-      table.sort(syms, function(a, b)
-        return a.location.range.start.line < b.location.range.start.line
-      end)
-      for i, sym in ipairs(syms) do
-        nodes[i] = new_sym_node(sym.kind, sym.name, sym.location.uri,
-          sym.location.range, nil)
-      end
-      set_content(nodes)
-    else
-      local nodes = build_doc_syms(syms, uri)
-      set_content(nodes)
-      -- Auto-expand top-level containers
-      for _, n in ipairs(nodes) do
-        if n.children then S.view:set_open(n, true) end
-      end
+    local nodes = build_file_nodes(syms)
+    set_content(nodes)
+    for _, n in ipairs(nodes) do
+      if n.children then S.view:set_open(n, true) end
     end
   end)
 end
@@ -597,15 +501,76 @@ end
 local function refresh_ws(bufnr, dir)
   S.buf = bufnr
   S.dir = dir
-  lsp.workspace_symbols(bufnr, dir, function(syms)
+
+  -- Accumulate file nodes by URI, update tree incrementally as each file arrives
+  local file_nodes = {}   -- uri → fnode
+  local initialized = false
+
+  local function get_or_create_fnode(uri)
+    if file_nodes[uri] then return file_nodes[uri] end
+    local fnode = node_m.new()
+    fnode.file_uri             = uri
+    fnode.open_text            = file_open_text
+    fnode.collapsed_text       = file_collapsed_text
+    fnode.handler["click"]     = file_click
+    fnode.handler["collapse_all"] = on_collapse_all
+    fnode.handler["expand_all"]   = on_expand_all
+    fnode.children = {}
+    file_nodes[uri] = fnode
+    return fnode
+  end
+
+  local function notify(uri, syms)
     if not win_valid() then return end
-    if not syms or #syms == 0 then set_empty(); return end
-    local fnodes = build_ws_syms(syms)
-    set_content(fnodes)
-    for _, fn in ipairs(fnodes) do
-      S.view:set_open(fn, true)
+    local fnode = get_or_create_fnode(uri)
+    -- Build sym children from normalized symbols
+    local sorted = {}
+    for _, s in ipairs(syms) do table.insert(sorted, s) end
+    table.sort(sorted, function(a, b)
+      return (a.range and a.range.start.line or 0)
+           < (b.range and b.range.start.line or 0)
+    end)
+    fnode.children = {}
+    for i, sym in ipairs(sorted) do
+      local sn = new_sym_node(sym)
+      sn.parent = fnode; sn.index = i
+      fnode.children[i] = sn
     end
-  end)
+
+    if not initialized then
+      -- First file: set_content with what we have so far
+      initialized = true
+      local nodes = {}
+      for _, fn in pairs(file_nodes) do table.insert(nodes, fn) end
+      set_content(nodes)
+    else
+      -- Subsequent files: append fnode to ghost if new, then update
+      local already = false
+      for _, child in ipairs(S.ghost.children) do
+        if child == fnode then already = true; break end
+      end
+      if not already then
+        local idx = #S.ghost.children + 1
+        fnode.parent = S.ghost; fnode.index = idx
+        S.ghost.children[idx] = fnode
+        tree_m.update_node(S.ghost)
+      else
+        tree_m.update_node(fnode)
+      end
+    end
+    S.view:set_open(fnode, true)
+  end
+
+  local function done()
+    if not win_valid() then return end
+    if not initialized then set_empty() end
+  end
+
+  if dir then
+    providers.module_symbols(bufnr, dir, notify, done)
+  else
+    providers.all_symbols(bufnr, notify, done)
+  end
 end
 
 function M.refresh()
@@ -790,13 +755,20 @@ end
 
 function M.setup(opts)
   opts    = opts or {}
-  load_state()  -- load persisted scope + filter before applying opts
+  state_mod.load()  -- load persisted scope + filter before applying opts
   S.scope = opts.scope or S.scope
   S.width = opts.width or S.width
   S.side  = opts.side  or S.side
   if opts.icons ~= nil then S.icons = opts.icons end
   setup_class()
   ensure_autocmds()
+end
+
+-- Register a custom symbol provider for a specific LSP server.
+-- provider = { file(bufnr,cb), module(bufnr,dir,cb), all(bufnr,cb) }
+-- Each cb receives Symbol[]|nil  where Symbol = { name, kind, uri, range, children? }
+function M.set_provider(server_name, provider)
+  providers.set_provider(server_name, provider)
 end
 
 return M
