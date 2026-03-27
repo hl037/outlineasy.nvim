@@ -13,8 +13,9 @@ Three scopes — **file**, **module**, **all** — let you navigate symbols scop
 
 ## Installation
 
+### lazy.nvim
+
 ```lua
--- lazy.nvim
 {
   "you/outlineasy.nvim",
   dependencies = {
@@ -24,6 +25,37 @@ Three scopes — **file**, **module**, **all** — let you navigate symbols scop
   opts = {},
 }
 ```
+
+`opts = {}` calls `setup()` automatically via lazy.nvim. Passing options directly:
+
+```lua
+{
+  "you/outlineasy.nvim",
+  dependencies = { "you/treeasy.nvim" },
+  config = function()
+    require("outlineasy").setup({
+      scope = "module",
+      width = 45,
+    })
+  end,
+}
+```
+
+### vim-plug
+
+```vim
+Plug 'you/treeasy.nvim'
+Plug 'nvim-tree/nvim-web-devicons'   " optional
+Plug 'you/outlineasy.nvim'
+```
+
+Then in your `init.lua` (or a `lua << EOF` block in `init.vim`):
+
+```lua
+require("outlineasy").setup({})
+```
+
+**Note:** `setup()` must be called explicitly — unlike lazy.nvim, vim-plug does not call it automatically.
 
 ## Setup
 
@@ -36,36 +68,40 @@ require("outlineasy").setup({
 })
 ```
 
-All fields are optional. Calling `setup()` is optional too.
+`setup()` registers the user commands and loads persisted state (scope, filters). It must be called before using the plugin.
 
 Recommended keybinds:
 
 ```lua
 vim.keymap.set("n", "<leader>o", "<cmd>Outlineasy<cr>")
 vim.keymap.set("n", "<leader>O", "<cmd>Outlineasy module<cr>")
+vim.keymap.set("n", "<leader>xo", "<cmd>OutlineasyClose<cr>")
 ```
 
 ## Commands
 
 | Command | Description |
 |---|---|
-| `:Outlineasy [scope]` | Toggle the outline. Optionally switch scope. |
+| `:Outlineasy [scope]` | Open the panel (or switch scope if already open). No arg = toggle. |
+| `:OutlineasyClose` | Close the panel. |
 | `:OutlineasyRefresh` | Force re-query and redraw. |
+
+`:Outlineasy` is idempotent: if the panel is already open and you call `:Outlineasy module`, it switches to module scope and refreshes without closing and reopening.
 
 ## Scopes
 
 ### `file`
-Uses `textDocument/documentSymbol`. Returns a hierarchical tree mirroring the document structure — with gopls this includes nested types, methods, fields, and constants.
+Uses `textDocument/documentSymbol` on the current buffer. Returns a hierarchical tree mirroring the document structure. With gopls this includes nested types, methods, fields, and constants.
 Auto-refreshes on buffer switch and on save.
 
 ### `module`
-Uses `textDocument/documentSymbol` on every file in the current buffer's directory. In Go this covers exactly one package. Results appear incrementally as each file is processed, grouped by file.
+Fans out `textDocument/documentSymbol` to every file in the current buffer's directory. In Go this covers exactly one package. Results appear incrementally as each file is processed, grouped by file.
 Auto-refreshes when you switch to a buffer in a different directory.
 
 ### `all`
 Same as `module` but operates on all currently loaded buffers with a matching filetype. No automatic refresh — use `:OutlineasyRefresh` explicitly.
 
-> **gopls note** — `workspace/symbol` with an empty query returns nothing in gopls regardless of the `symbolMatcher` setting. outlineasy works around this by using `textDocument/documentSymbol` per file for both `module` and `all` scopes. Files not yet loaded are opened silently (`bufload` + `filetype detect`) and closed after the request completes.
+> **gopls note** — `workspace/symbol` with an empty query returns nothing in gopls. outlineasy works around this by querying each file individually via `textDocument/documentSymbol`. Files not yet loaded are opened silently. The built-in gopls override handles this automatically.
 
 ## Keymaps
 
@@ -91,15 +127,15 @@ The `[/] filters` node below the header is a collapsible list of symbol-kind che
 
 Press `r` on any symbol node (or click its `[r]` button) to trigger an LSP rename. A `vim.ui.input` prompt appears pre-filled with the current name — confirm with `<CR>`, cancel with `<Esc>`.
 
-The rename uses `textDocument/rename` directly so workspace edits are applied atomically across all files. The outline auto-refreshes 200 ms afterwards. Requires a client with `renameProvider` (gopls, clangd, lua_ls, …).
+Requires a client with `renameProvider` (gopls, clangd, lua_ls, …).
 
 ## Devicons
 
-When [nvim-web-devicons](https://github.com/nvim-tree/nvim-web-devicons) is installed, file nodes in `module` and `all` scopes show the file-type icon with its canonical color. Colors are registered lazily into treeasy as `devicon_<ext>` keys and can be overridden like any other color key. The plugin degrades gracefully without devicons.
+When [nvim-web-devicons](https://github.com/nvim-tree/nvim-web-devicons) is installed, file nodes in `module` and `all` scopes show the file-type icon with its canonical color. The plugin degrades gracefully without devicons.
 
 ## Custom providers
 
-outlineasy uses a provider system to decouple LSP interaction from the tree. A provider is a Lua table with three functions:
+A provider is a Lua table with three functions:
 
 ```lua
 {
@@ -115,24 +151,13 @@ outlineasy uses a provider system to decouple LSP interaction from the tree. A p
 ```
 
 Providers are matched by LSP server name and **auto-loaded** from
-`lua/outlineasy/overrides/<server_name>.lua` if the file exists.
-You can also register one explicitly:
+`lua/outlineasy/overrides/<server_name>.lua`. You can also register one explicitly:
 
 ```lua
-require("outlineasy").set_provider("my_lsp", {
-  file   = function(bufnr, cb) ... end,
-  module = function(bufnr, dir, notify, done) ... end,
-  all    = function(bufnr, notify, done) ... end,
-})
+require("outlineasy").set_provider("my_lsp", { ... })
 ```
 
-The built-in gopls override lives at `lua/outlineasy/overrides/gopls.lua` and
-can be replaced the same way.
-
 ## Customisation
-
-Colors, keymaps, and tree symbols are managed by treeasy.nvim under the class
-`"outlineasy"`. Set them **before** `setup()` and they won't be overwritten:
 
 ```lua
 local treeasy = require("treeasy")
@@ -176,11 +201,11 @@ require("outlineasy").setup({ scope = "module", width = 45 })
 | `field` | struct fields / object properties |
 | `const` | constants |
 | `var_` | variables and other symbols |
-| `file_` | file nodes (`module` / `all` scopes), fallback when devicons absent |
+| `file_` | file nodes, devicons fallback |
 | `header` | header bar |
 | `btn` | `[-]` `[+]` `[󰑐]` `[r]` buttons |
-| `dim` | "no symbols found" text, filter hint |
-| `devicon_<ext>` | auto-registered per extension when devicons is active |
+| `dim` | "no symbols found", filter hint |
+| `devicon_<ext>` | auto-registered per extension |
 
 ## License
 

@@ -645,11 +645,18 @@ function M.open(scope)
   ensure_autocmds()
   if scope then S.scope = scope end
   setup_class()
-  if win_valid() then M.refresh(); return end
+  if win_valid() then
+    -- Already open: just switch scope and refresh
+    S.header.scope = S.scope
+    tree_m.update_node(S.header)
+    state_mod.save()
+    M.refresh()
+    return
+  end
   local src_buf = vim.api.nvim_get_current_buf()
   make_tree()
   open_win()
-  vim.cmd("wincmd p")  -- return focus to previous window
+  vim.cmd("wincmd p")
   S.buf = src_buf
   M.refresh()
 end
@@ -660,8 +667,14 @@ function M.close()
   S.ghost = nil; S.header = nil; S.filter_node = nil
 end
 
+-- Idempotent toggle: open if closed, close if open with no scope arg.
+-- If a scope arg is given and the panel is already open, just switch scope.
 function M.toggle(scope)
-  if win_valid() then M.close() else M.open(scope) end
+  if win_valid() and not scope then
+    M.close()
+  else
+    M.open(scope)
+  end
 end
 
 -- ── Autocmds ──────────────────────────────────────────────────────────────────
@@ -755,13 +768,29 @@ end
 
 function M.setup(opts)
   opts    = opts or {}
-  state_mod.load()  -- load persisted scope + filter before applying opts
+  state_mod.load()
   S.scope = opts.scope or S.scope
   S.width = opts.width or S.width
   S.side  = opts.side  or S.side
   if opts.icons ~= nil then S.icons = opts.icons end
   setup_class()
   ensure_autocmds()
+
+  vim.api.nvim_create_user_command("Outlineasy", function(o)
+    M.toggle(o.args ~= "" and o.args or nil)
+  end, {
+    nargs    = "?",
+    complete = function() return { "file", "module", "all" } end,
+    desc     = "Toggle/switch outlineasy scope (file | module | all)",
+  })
+
+  vim.api.nvim_create_user_command("OutlineasyClose", function()
+    M.close()
+  end, { desc = "Close the outlineasy panel" })
+
+  vim.api.nvim_create_user_command("OutlineasyRefresh", function()
+    M.refresh()
+  end, { desc = "Force-refresh the outlineasy panel" })
 end
 
 -- Register a custom symbol provider for a specific LSP server.

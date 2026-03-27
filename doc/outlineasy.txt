@@ -9,16 +9,17 @@ CONTENTS                                                   *outlineasy-contents*
 
   1. Introduction ................ |outlineasy-intro|
   2. Requirements ................ |outlineasy-requirements|
-  3. Setup ....................... |outlineasy-setup|
-  4. Commands .................... |outlineasy-commands|
-  5. Keymaps ..................... |outlineasy-keymaps|
-  6. Configuration ............... |outlineasy-config|
-  7. Scopes ...................... |outlineasy-scopes|
-  8. Filter ...................... |outlineasy-filter|
-  9. Rename ...................... |outlineasy-rename|
-  10. Devicons ................... |outlineasy-devicons|
-  11. Providers .................. |outlineasy-providers|
-  12. Customisation .............. |outlineasy-customisation|
+  3. Installation ................ |outlineasy-install|
+  4. Setup ....................... |outlineasy-setup|
+  5. Commands .................... |outlineasy-commands|
+  6. Keymaps ..................... |outlineasy-keymaps|
+  7. Configuration ............... |outlineasy-config|
+  8. Scopes ...................... |outlineasy-scopes|
+  9. Filter ...................... |outlineasy-filter|
+  10. Rename ..................... |outlineasy-rename|
+  11. Devicons ................... |outlineasy-devicons|
+  12. Providers .................. |outlineasy-providers|
+  13. Customisation .............. |outlineasy-customisation|
 
 ==============================================================================
 1. INTRODUCTION                                               *outlineasy-intro*
@@ -38,56 +39,87 @@ Module and all scopes update the tree incrementally as each file is processed.
 
   • Neovim >= 0.9
   • treeasy.nvim (https://github.com/you/treeasy.nvim)
-  • An LSP server attached to the buffer with `documentSymbolProvider`
+  • An LSP server with `documentSymbolProvider`
   • nvim-web-devicons (optional — file icons in module/all scopes)
 
 ==============================================================================
-3. SETUP                                                      *outlineasy-setup*
+3. INSTALLATION                                            *outlineasy-install*
 
-Minimal (lazy.nvim): >lua
+lazy.nvim ~
+>lua
   {
     "you/outlineasy.nvim",
     dependencies = {
       "you/treeasy.nvim",
       "nvim-tree/nvim-web-devicons",  -- optional
     },
-    opts = {},
+    opts = {},  -- calls setup() automatically
   }
 <
+vim-plug ~
+>vim
+  Plug 'you/treeasy.nvim'
+  Plug 'nvim-tree/nvim-web-devicons'   " optional
+  Plug 'you/outlineasy.nvim'
+<
+Then in your `init.lua`: >lua
+  require("outlineasy").setup({})
+<
+With vim-plug, `setup()` must be called explicitly — it is not called
+automatically.
+
+==============================================================================
+4. SETUP                                                      *outlineasy-setup*
+
+`require("outlineasy").setup({opts})`                       *outlineasy.setup()*
+
+Must be called once before using the plugin. Registers user commands, loads
+persisted state (scope, filters), and initialises the treeasy class.
+
 With all options: >lua
   require("outlineasy").setup({
-    scope = "file",   -- default scope
+    scope = "file",   -- default scope: "file" | "module" | "all"
     width = 40,       -- sidebar width in columns
     side  = "left",   -- "left" | "right"
     icons = true,     -- false = no nerd-font icons
   })
 <
 Recommended keybinds: >lua
-  vim.keymap.set("n", "<leader>o", "<cmd>Outlineasy<cr>")
-  vim.keymap.set("n", "<leader>O", "<cmd>Outlineasy module<cr>")
+  vim.keymap.set("n", "<leader>o",  "<cmd>Outlineasy<cr>")
+  vim.keymap.set("n", "<leader>O",  "<cmd>Outlineasy module<cr>")
+  vim.keymap.set("n", "<leader>xo", "<cmd>OutlineasyClose<cr>")
 <
 
 ==============================================================================
-4. COMMANDS                                                *outlineasy-commands*
+5. COMMANDS                                                *outlineasy-commands*
+
+Commands are registered by |outlineasy.setup()| and are not available before
+it is called.
 
                                                                    *:Outlineasy*
 :Outlineasy [scope]
-    Toggle the outline panel. If [scope] is given, switches to that scope
-    before toggling. Tab-completion available for scope values.
+    Without argument: toggle the panel (open if closed, close if open).
+    With a scope argument: open the panel if closed, or switch to the given
+    scope if already open — without closing and reopening.
+    Tab-completion is available for scope values.
 
     Examples: >
-      :Outlineasy
-      :Outlineasy file
-      :Outlineasy module
-      :Outlineasy all
+      :Outlineasy           " toggle
+      :Outlineasy file      " switch to / open in file scope
+      :Outlineasy module    " switch to / open in module scope
+      :Outlineasy all       " switch to / open in all scope
 <
+                                                             *:OutlineasyClose*
+:OutlineasyClose
+    Close the panel. No-op if already closed.
+
                                                             *:OutlineasyRefresh*
 :OutlineasyRefresh
     Force a full re-query and redraw. Useful for the `all` scope (no automatic
     refresh) or after a language server restart.
 
 ==============================================================================
-5. KEYMAPS                                                  *outlineasy-keymaps*
+6. KEYMAPS                                                  *outlineasy-keymaps*
 
 These keymaps are active only in the outline buffer.
 
@@ -104,18 +136,15 @@ These keymaps are active only in the outline buffer.
   c                    Recursively collapse subtree
   [󰑐] (header btn)    Refresh the tree
 
-`C` and `E` are global — they act on the full tree regardless of which node
-the cursor is on.
+`C` and `E` act on the entire tree regardless of which node has the cursor.
 
-All keymaps can be overridden via |outlineasy-customisation| before calling
-|outlineasy-setup|.
+All keymaps can be overridden via |outlineasy-customisation| before
+|outlineasy.setup()|.
 
 ==============================================================================
-6. CONFIGURATION                                             *outlineasy-config*
+7. CONFIGURATION                                             *outlineasy-config*
 
-`require("outlineasy").setup({opts})`                       *outlineasy.setup()*
-
-opts table fields:
+opts table fields for |outlineasy.setup()|:
 
   scope   string  Default scope on open. One of "file", "module", "all".
                   Default: "file"
@@ -130,12 +159,11 @@ opts table fields:
                   Set to false if your font does not support nerd-font glyphs.
                   Default: true
 
-All fields are optional. Calling setup() is optional — defaults apply on
-first use. Scope and filter state are persisted across sessions in
+Scope and filter state are persisted across sessions in
 `stdpath("data")/outlineasy/state.json`.
 
 ==============================================================================
-7. SCOPES                                                    *outlineasy-scopes*
+8. SCOPES                                                    *outlineasy-scopes*
 
                                                           *outlineasy-scope-file*
 file ~
@@ -148,8 +176,8 @@ file ~
 module ~
   Fans out `textDocument/documentSymbol` to every file in the current buffer's
   directory. In Go this covers exactly one package. Results appear
-  incrementally as each file responds, grouped by file with devicons when
-  available. Files not yet loaded are opened silently.
+  incrementally as each file responds, grouped by file. Files not yet loaded
+  are opened silently; gopls attach is awaited before each request.
   Auto-refreshes when you switch to a buffer in a different directory.
 
                                                            *outlineasy-scope-all*
@@ -159,14 +187,13 @@ all ~
   No automatic refresh — use |:OutlineasyRefresh| explicitly.
 
 Note on gopls ~
-  `workspace/symbol` with an empty query returns nothing in gopls regardless
-  of symbolMatcher. outlineasy works around this by querying each file
-  individually via `textDocument/documentSymbol` for both module and all
-  scopes. The built-in gopls override handles this automatically — no
-  configuration needed.
+  `workspace/symbol` with an empty query returns nothing in gopls. outlineasy
+  works around this by querying each file individually via
+  `textDocument/documentSymbol`. The built-in gopls override in
+  `overrides/gopls.lua` handles this automatically — no configuration needed.
 
 ==============================================================================
-8. FILTER                                                   *outlineasy-filter*
+9. FILTER                                                    *outlineasy-filter*
 
 The `[/] filters` node below the header holds a collapsible list of symbol-
 kind checkboxes. Each row controls one kind (function, method, struct, …).
@@ -179,7 +206,7 @@ of hidden kinds (e.g. `-2`). Hidden kinds are excluded from the tree across
 all scopes. Filter state is persisted in the state file.
 
 ==============================================================================
-9. RENAME                                                    *outlineasy-rename*
+10. RENAME                                                   *outlineasy-rename*
 
 Press `r` on any symbol node (or click its `[r]` button) to trigger an LSP
 rename. A `vim.ui.input` prompt appears pre-filled with the current name.
@@ -190,17 +217,16 @@ edits are applied atomically. The outline refreshes automatically 200 ms after
 the edit. Requires a client with `renameProvider` (gopls, clangd, lua_ls…).
 
 ==============================================================================
-10. DEVICONS                                                *outlineasy-devicons*
+11. DEVICONS                                                *outlineasy-devicons*
 
 When nvim-web-devicons is installed, file nodes in `module` and `all` scopes
 display the file-type icon with its canonical color. Colors are registered
-lazily into treeasy as `devicon_<ext>` keys and can be overridden like any
-other color key. The fallback uses the `file_` color key.
+lazily into treeasy as `devicon_<ext>` keys. The fallback uses `file_`.
 
 nvim-web-devicons is an optional dependency — the plugin loads without it.
 
 ==============================================================================
-11. PROVIDERS                                              *outlineasy-providers*
+12. PROVIDERS                                              *outlineasy-providers*
 
 outlineasy decouples LSP interaction from the tree via a provider system.
 Each provider is a Lua table: >lua
@@ -220,32 +246,24 @@ Symbol format: >lua
     name     = string,
     kind     = number,      -- LSP SymbolKind
     uri      = string,      -- file:// URI
-    range    = Range,       -- { start={line,character}, end={line,character} }
+    range    = Range,
     children = Symbol[],    -- optional
   }
 <
-Providers are matched by LSP server name. They are **auto-loaded** from
-`lua/outlineasy/overrides/<server_name>.lua` if that file exists. You can
-also register one at runtime: >lua
+Providers are matched by LSP server name. They are auto-loaded from
+`lua/outlineasy/overrides/<server_name>.lua` if that file exists.
+Register one explicitly: >lua
 
-  require("outlineasy").set_provider("my_lsp", {
-    file   = function(bufnr, cb) ... end,
-    module = function(bufnr, dir, notify, done) ... end,
-    all    = function(bufnr, notify, done) ... end,
-  })
+  require("outlineasy").set_provider("my_lsp", { ... })
 <                                                       *outlineasy.set_provider()*
 
-The built-in gopls override is at `lua/outlineasy/overrides/gopls.lua` and
-can be replaced the same way. The `notify/done` contract allows incremental
-rendering: call `notify(uri, syms)` for each file as it arrives, then
-`done()` when finished. The tree updates on every `notify` call.
+The `notify/done` contract enables incremental rendering: call
+`notify(uri, syms)` for each file as it arrives, then `done()` when finished.
 
 ==============================================================================
-12. CUSTOMISATION                                      *outlineasy-customisation*
+13. CUSTOMISATION                                      *outlineasy-customisation*
 
-Colors, keymaps, and tree symbols are managed by treeasy.nvim under the class
-name `"outlineasy"`. Set them **before** calling setup() so they are not
-overwritten: >lua
+Set colors and keymaps **before** calling |outlineasy.setup()|: >lua
 
   local treeasy = require("treeasy")
 
@@ -281,7 +299,7 @@ overwritten: >lua
   require("outlineasy").setup({ scope = "module", width = 45 })
 <
 
-Color keys and their targets:
+Color keys:
 
   Key              Applies to ~
   ──────────────── ──────────────────────────────────────────
