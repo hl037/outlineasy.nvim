@@ -17,7 +17,7 @@ Three scopes — **file**, **module**, **all** — let you navigate symbols scop
 
 ```lua
 {
-  hl037/outlineasy.nvim",
+  "hl037/outlineasy.nvim",
   dependencies = {
     "hl037/treeasy.nvim",
     "nvim-tree/nvim-web-devicons",  -- optional
