@@ -14,6 +14,7 @@ M.S = {
   width       = 40,
   side        = "left",
   icons       = true,
+  refreshing  = false,  -- true while a module/all refresh is in flight
 }
 
 local STATE_FILE = vim.fn.stdpath("data") .. "/outlineasy/state.json"

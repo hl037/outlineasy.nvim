@@ -499,11 +499,12 @@ local function refresh_file(bufnr)
 end
 
 local function refresh_ws(bufnr, dir)
+  if S.refreshing then return end
+  S.refreshing = true
   S.buf = bufnr
   S.dir = dir
 
-  -- Accumulate file nodes by URI, update tree incrementally as each file arrives
-  local file_nodes = {}   -- uri → fnode
+  local file_nodes = {}
   local initialized = false
 
   local function get_or_create_fnode(uri)
@@ -523,7 +524,6 @@ local function refresh_ws(bufnr, dir)
   local function notify(uri, syms)
     if not win_valid() then return end
     local fnode = get_or_create_fnode(uri)
-    -- Build sym children from normalized symbols
     local sorted = {}
     for _, s in ipairs(syms) do table.insert(sorted, s) end
     table.sort(sorted, function(a, b)
@@ -538,13 +538,11 @@ local function refresh_ws(bufnr, dir)
     end
 
     if not initialized then
-      -- First file: set_content with what we have so far
       initialized = true
       local nodes = {}
       for _, fn in pairs(file_nodes) do table.insert(nodes, fn) end
       set_content(nodes)
     else
-      -- Subsequent files: append fnode to ghost if new, then update
       local already = false
       for _, child in ipairs(S.ghost.children) do
         if child == fnode then already = true; break end
@@ -562,6 +560,7 @@ local function refresh_ws(bufnr, dir)
   end
 
   local function done()
+    S.refreshing = false
     if not win_valid() then return end
     if not initialized then set_empty() end
   end
@@ -693,6 +692,7 @@ ensure_autocmds = function()
 
   local function try_refresh_buf(bufnr)
     if not win_valid() then return end
+    if S.refreshing then return end
     if vim.bo[bufnr].buftype ~= "" then return end
     if is_outline_buf(bufnr) then return end
     if S.scope == "file" then
