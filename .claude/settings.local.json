@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C /app log --oneline -10)",
+      "Bash(git -C /app log --oneline origin/master -10)"
+    ]
+  }
+}

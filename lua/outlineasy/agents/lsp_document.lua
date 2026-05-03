@@ -66,6 +66,16 @@ function LspDocumentAgent:_query()
     end, bufnr)
 end
 
+-- Fallback node builder if outlineasy ref not available
+local function _make_sym_node(sym, node_m)
+  local n = node_m.new()
+  n.sym_kind  = sym.kind
+  n.sym_name  = sym.name
+  n.sym_uri   = sym.uri
+  n.sym_range = sym.range
+  return n
+end
+
 function LspDocumentAgent:_populate(syms)
   if not self._alive then return end
   local node   = self.node
@@ -87,16 +97,6 @@ function LspDocumentAgent:_populate(syms)
   end
 
   tree_m.update_node(node)
-end
-
--- Fallback node builder if outlineasy ref not available
-local function _make_sym_node(sym, node_m)
-  local n = node_m.new()
-  n.sym_kind  = sym.kind
-  n.sym_name  = sym.name
-  n.sym_uri   = sym.uri
-  n.sym_range = sym.range
-  return n
 end
 
 return LspDocumentAgent

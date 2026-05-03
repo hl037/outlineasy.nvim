@@ -94,7 +94,8 @@ function ModuleBufferAgent:change(bufnr, opts)
     -- Same dir: nop (also handles same bufnr case)
     return true
   end
-  return bufnr == self._bufnr
+  -- scope "all": agent persists regardless of which buffer is active
+  return true
 end
 
 function ModuleBufferAgent:kill()
